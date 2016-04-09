@@ -57,6 +57,12 @@ const char MQTT_SERVER[] PROGMEM    = MQTT_SERVER_HOST;
 const char MQTT_USERNAME[] PROGMEM  = MQTT_USER;
 const char MQTT_PASSWORD[] PROGMEM  = MQTT_KEY;
 
+long adctime;
+long mqtttime;
+long adcdelay = 1000;
+long mqttdelay = 5000;
+
+
 // Setup the MQTT client class by passing in the WiFi client and MQTT server and login details.
 Adafruit_MQTT_Client mqtt(&client, MQTT_SERVER, MQTT_SERVERPORT, MQTT_USERNAME, MQTT_PASSWORD);
 
@@ -72,28 +78,6 @@ Adafruit_MQTT_Publish current = Adafruit_MQTT_Publish(&mqtt, CURRENT_FEED);
 // Bug workaround for Arduino 1.6.6, it seems to need a function declaration
 // for some reason (only affects ESP8266, likely an arduino-builder bug).
 void MQTT_connect();
-
-void setup() {
-  Serial.begin(115200);
-  delay(10);
-
-  Serial.println(F("Current Node via MQTT"));
-
-  // Connect to WiFi access point.
-  Serial.println(); Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(WLAN_SSID);
-
-  WiFi.begin(WLAN_SSID, WLAN_PASS);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println();
-
-  Serial.println("WiFi connected");
-  Serial.print("IP address: "); Serial.println(WiFi.localIP());
-}
 
 
 void setup_pins() {
@@ -170,28 +154,71 @@ int read_adc(int channel){
 
 float readvalue = 0;
 
-void loop() {
+// set next milles serial port should be read
+void setAdcMillies() {
+  adctime = millis() + adcdelay;
+}
+
+// set next milles serial port should be read
+void setMQTTMillies() {
+  mqtttime = millis() + mqttdelay;
+}
+
+
+void setup() {
+  Serial.begin(115200);
+  delay(10);
+
+  Serial.println(F("Current Node via MQTT"));
+
+  // Connect to WiFi access point.
+  Serial.println(); Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(WLAN_SSID);
+
+  WiFi.begin(WLAN_SSID, WLAN_PASS);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println();
+
+  Serial.println("WiFi connected");
+  Serial.print("IP address: "); Serial.println(WiFi.localIP());
+
   // Ensure the connection to the MQTT server is alive (this will make the first
   // connection and automatically reconnect when disconnected).  See the MQTT_connect
   // function definition further below.
   MQTT_connect();
 
-  // Now we can publish stuff!
-  readvalue = read_adc(1);
-  Serial.print(F("\nSending current val "));
-  Serial.print(readvalue);
-  Serial.print("...");
-  if (! current.publish(readvalue)) {
-    Serial.println(F("Failed"));
-  } else {
-    Serial.println(F("OK!"));
+  // Set delays
+  setAdcMillies();
+  setMQTTMillies();
+}
+
+
+
+void loop() {
+
+  // read ADC each adctime
+  if (millis() >= adctime) {
+	readvalue = read_adc(1)    
+	Serial.print(F("\nI've read this ->"));
+	Serial.print(readvalue);
+	Serial.print("...");
+	
+	setAdcMillies();
   }
 
-  // ping the server to keep the mqtt connection alive
-  // NOT required if you are publishing once every KEEPALIVE seconds
-  /*
-  if(! mqtt.ping()) {
-    mqtt.disconnect();
+  // publish to MQTT each mqtttime
+  if (millis() >= mqtttime) {
+	  if (! current.publish(readvalue)) {
+		Serial.println(F("MQTT send Failed"));
+	  } else {
+		Serial.println(F("MQTT send OK!"));
+	  }
+	
+	setMQTTMillies();
   }
-  */
+
 }
